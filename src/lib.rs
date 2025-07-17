@@ -80,7 +80,7 @@ impl GpuContext {
                 &wgpu::DeviceDescriptor {
                     label: Some("WASM Device"),
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                    required_limits: wgpu::Limits::default(),
                     memory_hints: Default::default(),
                 },
                 None,
