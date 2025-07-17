@@ -11,10 +11,11 @@ crate-type = ["cdylib"]
 [dependencies]
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-wgpu = { version = "26", features = ["webgl"] }
+wgpu = { version = "22", features = ["webgl"] }
 web-sys = "0.3"
 console_error_panic_hook = "0.1"
 bytemuck = "1.14"
+futures = "0.3"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -24,7 +25,6 @@ features = ["console"]
 // src/lib.rs
 use wasm_bindgen::prelude::*;
 use wgpu;
-use bytemuck;
 
 #[wasm_bindgen]
 extern "C" {
@@ -54,26 +54,22 @@ impl GpuContext {
         console_log!("Initializing wgpu instance...");
         
         // Create instance with WebGL backend
-        // let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-        //     backends: wgpu::Backends::BROWSER_WEBGPU | wgpu::Backends::GL,
-        //     ..Default::default()
-        // });
-        let instance = wgpu::Instance::default();
-
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::BROWSER_WEBGPU | wgpu::Backends::GL,
+            ..Default::default()
+        });
+        
         console_log!("Requesting adapter...");
         
         // Request adapter
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: None,
                 force_fallback_adapter: false,
             })
-            .await;
-        let adapter = match adapter {
-            Ok(adapter) => adapter,
-            Err(e) => return Err(JsValue::from_str("No suitable GPU adapter found")),
-        };
+            .await
+            .ok_or(JsValue::from_str("Failed to find suitable adapter"))?;
         
         console_log!("Adapter found: {:?}", adapter.get_info());
         
@@ -84,10 +80,10 @@ impl GpuContext {
                 &wgpu::DeviceDescriptor {
                     label: Some("WASM Device"),
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::downlevel_webgl2_defaults()
-                      .using_resolution(adapter.limits()),                    memory_hints: Default::default(),
-                    trace: wgpu::Trace::default(),
+                    required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                    memory_hints: Default::default(),
                 },
+                None,
             )
             .await
             .map_err(|e| JsValue::from_str(&format!("Failed to create device: {:?}", e)))?;
@@ -180,7 +176,7 @@ impl GpuContext {
             label: Some("Compute Pipeline"),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: Some("main"),
+            entry_point: "main",
             compilation_options: Default::default(),
             cache: None,
         });
@@ -226,7 +222,7 @@ impl GpuContext {
             let _ = tx.send(result);
         });
         
-        self.device.poll(wgpu::PollType::Wait);
+        self.device.poll(wgpu::MaintainBase::Wait);
         
         rx.await
             .expect("Failed to receive mapping result")
