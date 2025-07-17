@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wgpu WebAssembly Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        #output {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>wgpu WebAssembly Test</h1>
+        <p>This page tests wgpu device initialization in WebAssembly.</p>
+        
+        <div id="status" class="status info">Ready to initialize wgpu...</div>
+        
+        <div>
+            <button id="initBtn">Initialize GPU Device</button>
+            <button id="infoBtn" disabled>Show Device Info</button>
+            <button id="computeBtn" disabled>Run Compute Shader</button>
+        </div>
+        
+        <div id="output"></div>
+    </div>
+
+    <script type="module">
+        // Import the wasm module - adjust path as needed
+        import init, { GpuContext } from './pkg/wgpu_wasm_test.js';
+        
+        let gpuContext = null;
+        
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            output.textContent += `[${timestamp}] ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+            
+            console.log(message);
+        }
+        
+        function setStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        async function initializeGpu() {
+            const initBtn = document.getElementById('initBtn');
+            const infoBtn = document.getElementById('infoBtn');
+            const computeBtn = document.getElementById('computeBtn');
+            
+            try {
+                initBtn.disabled = true;
+                setStatus('Initializing WebAssembly module...', 'info');
+                log('Loading WASM module...');
+                
+                // Initialize the wasm module
+                await init();
+                log('WASM module loaded successfully');
+                
+                setStatus('Creating GPU context...', 'info');
+                log('Initializing GPU device...');
+                
+                // Create GPU context
+                gpuContext = await new GpuContext();
+                
+                setStatus('GPU device initialized successfully!', 'success');
+                log('GPU context created successfully!');
+                
+                // Enable other buttons
+                infoBtn.disabled = false;
+                computeBtn.disabled = false;
+                
+            } catch (error) {
+                setStatus(`Error: ${error}`, 'error');
+                log(`Failed to initialize GPU: ${error}`, 'error');
+                initBtn.disabled = false;
+            }
+        }
+        
+        function showDeviceInfo() {
+            if (!gpuContext) {
+                log('GPU context not initialized', 'error');
+                return;
+            }
+            
+            try {
+                log('\n=== Adapter Information ===');
+                log(gpuContext.get_adapter_info());
+                
+                log('\n=== Device Features ===');
+                log(gpuContext.get_device_features());
+                
+                log('\n=== Device Limits ===');
+                log(gpuContext.get_device_limits());
+            } catch (error) {
+                log(`Error getting device info: ${error}`, 'error');
+            }
+        }
+        
+        async function runCompute() {
+            if (!gpuContext) {
+                log('GPU context not initialized', 'error');
+                return;
+            }
+            
+            try {
+                log('\n=== Running Compute Shader ===');
+                const result = await gpuContext.run_simple_compute();
+                log(`Compute result (first 10 values): [${result.slice(0, 10).join(', ')}...]`);
+                log(`Total values computed: ${result.length}`);
+                log('Compute shader executed successfully!');
+            } catch (error) {
+                log(`Error running compute shader: ${error}`, 'error');
+            }
+        }
+        
+        // Check for WebGPU support
+        if (!navigator.gpu) {
+            setStatus('WebGPU is not supported in this browser!', 'error');
+            log('WebGPU is not available. Please use a browser that supports WebGPU.', 'error');
+            document.getElementById('initBtn').disabled = true;
+        } else {
+            log('WebGPU is supported in this browser');
+        }
+        
+        // Add event listeners
+        document.getElementById('initBtn').addEventListener('click', initializeGpu);
+        document.getElementById('infoBtn').addEventListener('click', showDeviceInfo);
+        document.getElementById('computeBtn').addEventListener('click', runCompute);
+    </script>
+</body>
+</html>
